@@ -1,14 +1,13 @@
 package com.airflow.centralbackend.Model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "trucks")
 public class Truck {
     @Id
-    private String truckId;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
     private String licensePlate;
     private String model;
     private String capacity;
@@ -16,14 +15,14 @@ public class Truck {
     public Truck() {}
 
     public Truck(String truckId, String licensePlate, String model, String capacity) {
-        this.truckId = truckId;
+        this.id = truckId;
         this.licensePlate = licensePlate;
         this.model = model;
         this.capacity = capacity;
     }
 
     public String getTruckId() {
-        return truckId;
+        return id;
     }
 
     public String getLicensePlate() {

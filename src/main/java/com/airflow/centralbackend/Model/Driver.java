@@ -1,15 +1,15 @@
 package com.airflow.centralbackend.Model;
 
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "driver")
 public class Driver {
     @Id
-    private String driverId;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
+
     private String name;
     private String licenseNumber;
     private String phoneNumber;
@@ -17,18 +17,18 @@ public class Driver {
     public Driver() {}
 
     public Driver(String driverId, String name, String licenseNumber, String phoneNumber) {
-        this.driverId = driverId;
+        this.id = driverId;
         this.name = name;
         this.licenseNumber = licenseNumber;
         this.phoneNumber = phoneNumber;
     }
 
     public String getDriverId() {
-        return driverId;
+        return id;
     }
 
     public void setDriverId(String driverId) {
-        this.driverId = driverId;
+        this.id = driverId;
     }
 
     public String getName() {

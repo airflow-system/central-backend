@@ -1,27 +1,27 @@
 package com.airflow.centralbackend.Model;
 
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 
 @Entity
 @Table(name = "parking_slots")
 public class ParkingSlot {
     @Id
-    private String slotId;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
+
     private String gateId;
     private boolean reserved;
 
     public ParkingSlot() {}
 
     public ParkingSlot(String slotId, String gateId) {
-        this.slotId = slotId;
+        this.id = slotId;
         this.gateId = gateId;
         this.reserved = false;
     }
 
     public String getSlotId() {
-        return slotId;
+        return id;
     }
 
     public String getGateId() {

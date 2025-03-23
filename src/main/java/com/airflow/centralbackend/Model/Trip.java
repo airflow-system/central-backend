@@ -1,68 +1,64 @@
 package com.airflow.centralbackend.Model;
 
 import jakarta.persistence.*;
-
 import java.time.LocalDateTime;
-
 
 @Entity
 @Table(name = "trips")
 public class Trip {
     @Id
-    @Column(name = "trip_id")
-    private String tripId;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private String id;
 
-    // We link to the Driver entity via a foreign key column "driver_id".
-    // EAGER or LAZY loading is up to you. For now, let's do EAGER.
-    @ManyToOne(fetch = jakarta.persistence.FetchType.EAGER)
-    @JoinColumn(name = "driver_id")
+    // Linking to Driver entity.
+    // The join column "driver" in the trips table will reference the "id" column in the driver table.
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "driver", referencedColumnName = "id")
     private Driver driver;
 
-    // Similarly for Truck
+    // Linking to Truck entity.
+    // The join column "truck" in the trips table will reference the "id" column in the truck table.
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "truck_id")
+    @JoinColumn(name = "truck", referencedColumnName = "id")
     private Truck truck;
 
-    // If you want each Trip to hold a reserved parking slot, do the same
+    // Linking to ParkingSlot entity.
+    // The join column "parking_slot" in the trips table will reference the "id" column in the parking_slots table.
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "parking_slot_id")
+    @JoinColumn(name = "parking_slot", referencedColumnName = "id")
     private ParkingSlot reservedParkingSlot;
 
-    // We'll embed the location columns directly in "trips" (latitude, longitude).
+    // Embedded location details.
     @Embedded
     private Location currentLocation;
 
-    @Column
     private LocalDateTime startTime;
-
-    @Column
     private LocalDateTime estimatedArrivalTime;
-
-    @Column
     private boolean active;
 
-    // We do NOT store Route or DaliAdvice in DB => mark them @Transient
+    // These fields are not persisted.
     @Transient
-    private Route currentRoute;          // no table/column
+    private Route currentRoute;
     @Transient
-    private DaliAdvice latestDaliAdvice; // no table/column
+    private DaliAdvice latestDaliAdvice;
 
     public Trip() {
         this.active = true;
     }
 
-    public Trip(String tripId, Driver driver, Truck truck) {
-        this.tripId = tripId;
+    public Trip(String id, Driver driver, Truck truck) {
+        this.id = id;
         this.driver = driver;
         this.truck = truck;
         this.active = true;
     }
 
-    public String getTripId() {
-        return tripId;
+    // Use getId() / setId() for the primary key, aligning with your updated models.
+    public String getId() {
+        return id;
     }
-    public void setTripId(String tripId) {
-        this.tripId = tripId;
+    public void setId(String id) {
+        this.id = id;
     }
 
     public Driver getDriver() {

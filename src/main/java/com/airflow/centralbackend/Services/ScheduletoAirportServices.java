@@ -56,23 +56,21 @@ public class ScheduletoAirportServices {
      */
     public Trip scheduleTruck(String truckId, String driverId, Location currentLocation) {
         // 1) Validate driver & truck
-        System.out.println(driverId);
-        List<Driver> drivers = driverRepository.findAll();
-        System.out.println("Drivers in DB: " + drivers.get(0).getDriverId());
-//        Driver driver = driverRepository.findById(driverId).orElseThrow(
-//                () -> new RuntimeException("Driver not found in DB: " + driverId)
-//        );
-        Driver driver = drivers.get(0);
+//        System.out.println(driverId);
+        Driver driver = driverRepository.findById(driverId).orElseThrow(
+                () -> new RuntimeException("Driver not found in DB: " + driverId)
+        );
+//        Driver driver = drivers.get(0);
         Truck truck = truckRepository.findById(truckId).orElseThrow(
                 () -> new RuntimeException("Truck not found in DB: " + truckId)
         );
 
         // 2) DALI traffic data
         DaliAdvice advice = mockDaliClient.getRealTimeTrafficData(currentLocation);
-        System.out.println("[DALI Info] " + advice.getMessage());
-
-        System.out.println(currentLocation.getLatitude());
-        System.out.println(currentLocation.getLongitude());
+//        System.out.println("[DALI Info] " + advice.getMessage());
+//
+//        System.out.println(currentLocation.getLatitude());
+//        System.out.println(currentLocation.getLongitude());
         // 3) Call Google Directions to generate a route
         Route route = fetchRouteFromGoogle(
                 currentLocation.getLatitude(),
@@ -99,9 +97,9 @@ public class ScheduletoAirportServices {
         //   parkingSlotRepository.save(ps);
 
         // 6) Build a new Trip entity
-        String tripId = UUID.randomUUID().toString();
+//        String tripId = UUID.randomUUID().toString();
         Trip trip = new Trip();
-        trip.setTripId(tripId);
+//        trip.setId(tripId);
         trip.setDriver(driver);
 //        System.out.println(trip.getDriver());
         trip.setTruck(truck);
@@ -116,9 +114,10 @@ public class ScheduletoAirportServices {
         trip.setEstimatedArrivalTime(now.plusMinutes((long) route.getEstimatedTimeMinutes()));
 
         // Save to DB
-        tripRepository.save(trip);
 
-        return trip;
+        Trip tripNow = tripRepository.save(trip);
+//        System.out.println(tripNow.getId() +" "+ tripNow.getDriver());
+        return tripNow;
     }
 
     /**
@@ -127,16 +126,13 @@ public class ScheduletoAirportServices {
      */
     public Trip updateTripLocation(String tripId, Location newLocation) {
         // Retrieve from DB
-        List<Trip> trips = tripRepository.findAll();
-        Trip trip = new Trip();
-        for(Trip tempTrip : trips) {
-            if(tempTrip.getTripId().equals(tripId)) {
-                trip = tempTrip;
-            }
-        }
-//        Trip trip = tripRepository.findById(tripId).orElseThrow(
-//                () -> new RuntimeException("Trip not found: " + tripId)
-//        );
+        Trip trip = tripRepository.findById(tripId).orElseThrow(
+                () -> new RuntimeException("Trip not found: " + tripId)
+        );
+
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+//        System.out.println("Update Trip trip"+trip);
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         if (!trip.isActive()) {
             throw new RuntimeException("Trip is already completed!");
         }
@@ -145,7 +141,9 @@ public class ScheduletoAirportServices {
         trip.setCurrentLocation(newLocation);
 
         // 2) Send location to DALI
-        System.out.println("sun will set"+trip.getDriver());
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+//        System.out.println("Update Trip Driver:- -----"+trip.getDriver());
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         mockDaliClient.sendLocationUpdateToDali(newLocation, trip.getDriver().getDriverId());
 
         // 3) Get new traffic advice
@@ -186,6 +184,9 @@ public class ScheduletoAirportServices {
         Trip trip = tripRepository.findById(tripId).orElseThrow(
                 () -> new RuntimeException("Trip not found: " + tripId)
         );
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+//        System.out.println("completeTrip:------"+trip);
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         if (!trip.isActive()) {
             throw new RuntimeException("Trip is already completed!");
         }
@@ -207,7 +208,16 @@ public class ScheduletoAirportServices {
      * the ephemeral Route or DaliAdvice (since they are transient).
      */
     public Trip getTrip(String tripId) {
-        return tripRepository.findById(tripId).orElse(null);
+
+        Trip trip = tripRepository.findById(tripId).orElseThrow(
+                () -> new RuntimeException("Trip not found: " + tripId)
+        );
+
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+//        System.out.println("Get Trip"+trip);
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        return trip;
+
     }
 
     /**
