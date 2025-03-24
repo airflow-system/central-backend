@@ -11,19 +11,22 @@ public class Trip {
     private String id;
 
     // Linking to Driver entity.
-    // The join column "driver" in the trips table will reference the "id" column in the driver table.
+    // The join column "driver" in the trips table will reference the "id" column in
+    // the driver table.
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "driver", referencedColumnName = "id")
     private Driver driver;
 
     // Linking to Truck entity.
-    // The join column "truck" in the trips table will reference the "id" column in the truck table.
+    // The join column "truck" in the trips table will reference the "id" column in
+    // the truck table.
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "truck", referencedColumnName = "id")
     private Truck truck;
 
     // Linking to ParkingSlot entity.
-    // The join column "parking_slot" in the trips table will reference the "id" column in the parking_slots table.
+    // The join column "parking_slot" in the trips table will reference the "id"
+    // column in the parking_slots table.
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "parking_slot", referencedColumnName = "id")
     private ParkingSlot reservedParkingSlot;
@@ -42,6 +45,15 @@ public class Trip {
     @Transient
     private DaliAdvice latestDaliAdvice;
 
+    @Transient
+    private boolean transientErrorFlag = false;
+
+    @Transient
+    private String transientErrorCode;
+
+    @Transient
+    private String errorMessage;
+
     public Trip() {
         this.active = true;
     }
@@ -57,6 +69,7 @@ public class Trip {
     public String getId() {
         return id;
     }
+
     public void setId(String id) {
         this.id = id;
     }
@@ -64,6 +77,7 @@ public class Trip {
     public Driver getDriver() {
         return driver;
     }
+
     public void setDriver(Driver driver) {
         this.driver = driver;
     }
@@ -71,6 +85,7 @@ public class Trip {
     public Truck getTruck() {
         return truck;
     }
+
     public void setTruck(Truck truck) {
         this.truck = truck;
     }
@@ -78,6 +93,7 @@ public class Trip {
     public ParkingSlot getReservedParkingSlot() {
         return reservedParkingSlot;
     }
+
     public void setReservedParkingSlot(ParkingSlot reservedParkingSlot) {
         this.reservedParkingSlot = reservedParkingSlot;
     }
@@ -85,6 +101,7 @@ public class Trip {
     public Location getCurrentLocation() {
         return currentLocation;
     }
+
     public void setCurrentLocation(Location currentLocation) {
         this.currentLocation = currentLocation;
     }
@@ -92,6 +109,7 @@ public class Trip {
     public LocalDateTime getStartTime() {
         return startTime;
     }
+
     public void setStartTime(LocalDateTime startTime) {
         this.startTime = startTime;
     }
@@ -99,6 +117,7 @@ public class Trip {
     public LocalDateTime getEstimatedArrivalTime() {
         return estimatedArrivalTime;
     }
+
     public void setEstimatedArrivalTime(LocalDateTime estimatedArrivalTime) {
         this.estimatedArrivalTime = estimatedArrivalTime;
     }
@@ -106,6 +125,7 @@ public class Trip {
     public boolean isActive() {
         return active;
     }
+
     public void setActive(boolean active) {
         this.active = active;
     }
@@ -113,6 +133,7 @@ public class Trip {
     public Route getCurrentRoute() {
         return currentRoute;
     }
+
     public void setCurrentRoute(Route currentRoute) {
         this.currentRoute = currentRoute;
     }
@@ -120,11 +141,39 @@ public class Trip {
     public DaliAdvice getLatestDaliAdvice() {
         return latestDaliAdvice;
     }
+
     public void setLatestDaliAdvice(DaliAdvice latestDaliAdvice) {
         this.latestDaliAdvice = latestDaliAdvice;
     }
 
     public void completeTrip() {
         this.active = false;
+    }
+
+    @Transient
+    public boolean isTransientErrorFlag() {
+        return transientErrorFlag;
+    }
+
+    public void setTransientErrorFlag(boolean transientErrorFlag) {
+        this.transientErrorFlag = transientErrorFlag;
+    }
+
+    @Transient
+    public String getTransientErrorCode() {
+        return transientErrorCode;
+    }
+
+    public void setTransientErrorCode(String transientErrorCode) {
+        this.transientErrorCode = transientErrorCode;
+    }
+
+    @Transient
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 }
