@@ -24,7 +24,7 @@ public class MockDaliClient {
                 return new DaliAdvice("Possible slow traffic ahead. Expect 5 min delay.", false, "INFO", null);
             default:
                 // occasionally trigger route change
-                Location accidentLoc = new Location(currentLocation.getLatitude()+0.01, currentLocation.getLongitude()-0.01);
+                Location accidentLoc = new Location(currentLocation.getLatitude()+0.18, currentLocation.getLongitude()-0.18);
                 return new DaliAdvice("Accident reported ahead, route changed!", true, "WARNING", accidentLoc);
         }
     }
