@@ -66,6 +66,9 @@ public class ScheduletoAirportServices {
                     currentLocation.getLongitude(),
                     AIRPORT_LAT,
                     AIRPORT_LON);
+
+            Location airportLocation = new Location(AIRPORT_LAT, AIRPORT_LON);
+            route.setRelevantLocation(airportLocation);
         } catch (Exception e) {
             return createErrorTrip("Failed to fetch route: " + e.getMessage(), "ROUTE_FETCH_FAILED");
         }
@@ -307,6 +310,23 @@ public class ScheduletoAirportServices {
             throw new Exception("No routes found in the Google response");
         }
 
+        // Map<String, Object> firstRoute = routes.get(0);
+
+        // // Extract duration
+        // double durationMinutes = 0.0;
+        // Object durationField = firstRoute.get("duration");
+        // if (durationField != null) {
+        // durationMinutes = parseDurationField(durationField);
+        // }
+
+        // // Extract distance
+        // double distanceKm = 0.0;
+        // Object distanceField = firstRoute.get("distanceMeters");
+        // if (distanceField != null) {
+        // distanceKm = parseDistanceField(distanceField);
+        // }
+
+        // return new Route(new ArrayList<>(), distanceKm, durationMinutes);
         Map<String, Object> firstRoute = routes.get(0);
 
         // Extract duration
@@ -323,7 +343,18 @@ public class ScheduletoAirportServices {
             distanceKm = parseDistanceField(distanceField);
         }
 
-        return new Route(new ArrayList<>(), distanceKm, durationMinutes);
+        // ✅ Extract encoded polyline
+        String polyline = null;
+        Map<String, Object> polylineMap = (Map<String, Object>) firstRoute.get("polyline");
+        if (polylineMap != null) {
+            polyline = (String) polylineMap.get("encodedPolyline");
+        }
+
+        // ✅ Add encodedPolyline to the Route object
+        Route route = new Route(new ArrayList<>(), distanceKm, durationMinutes);
+        route.setEncodedPolyline(polyline); // 🔥 THIS LINE IS IMPORTANT
+        return route;
+
     }
 
     /**
