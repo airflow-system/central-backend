@@ -4,35 +4,41 @@ import com.airflow.centralbackend.Model.DaliAdvice;
 import com.airflow.centralbackend.Model.Location;
 import org.springframework.stereotype.Component;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 
 @Component
 public class MockDaliClient {
     private Random random = new Random();
 
-    /**
-     * Retrieve traffic advice for a given location.
-     * Could mention upcoming traffic lights, accidents, etc.
-     */
+    // A diverse list of DALI advices simulating real-world conditions.
+    private List<DaliAdvice> adviceOptions = Arrays.asList(
+            new DaliAdvice("Maintain ~50 km/h to pass next light while green.", false, "INFO", null),
+            new DaliAdvice("Traffic congestion ahead; expect 5 min delay.", false, "INFO", null),
+            new DaliAdvice("Optimal speed is 60 km/h for current road conditions.", false, "INFO", null),
+            new DaliAdvice("Road closure reported ahead, change route immediately.", true, "WARNING", null),
+            new DaliAdvice("Accident reported at next intersection, consider alternate route.", true, "WARNING", null),
+            new DaliAdvice("Expect a brief stop at traffic light, maintain 40 km/h.", false, "INFO", null)
+    );
+
     public DaliAdvice getRealTimeTrafficData(Location currentLocation) {
-        // This is a mock. We'll randomly produce messages
-        int r = random.nextInt(3);
-        switch(r) {
-            case 0:
-                return new DaliAdvice("Maintain ~50 km/h to pass next light while green.", false, "INFO", null);
-            case 1:
-                return new DaliAdvice("Possible slow traffic ahead. Expect 5 min delay.", false, "INFO", null);
-            default:
-                // occasionally trigger route change
-                Location accidentLoc = new Location(currentLocation.getLatitude()+0.18, currentLocation.getLongitude()-0.18);
-                return new DaliAdvice("Accident reported ahead, route changed!", true, "WARNING", accidentLoc);
+        // Randomly select one advice from the list.
+        int index = random.nextInt(adviceOptions.size());
+        DaliAdvice selected = adviceOptions.get(index);
+
+        // If a route change is indicated, provide a mock location for the event.
+        if (selected.isRouteChanged()) {
+            double offsetLat = currentLocation.getLatitude() + 0.02 + random.nextDouble() * 0.01;
+            double offsetLon = currentLocation.getLongitude() - 0.02 - random.nextDouble() * 0.01;
+            return new DaliAdvice(selected.getMessage(), true, selected.getSeverity(), new Location(offsetLat, offsetLon));
+        } else {
+            return selected;
         }
     }
 
     public void sendLocationUpdateToDali(Location currentLocation, String driverId) {
-        System.out.println("[DALI] Received location from driver " + driverId
-                + ": lat=" + currentLocation.getLatitude()
-                + ", lon=" + currentLocation.getLongitude());
+        System.out.println("[DALI] Received location update from driver " + driverId +
+                ": lat=" + currentLocation.getLatitude() + ", lon=" + currentLocation.getLongitude());
     }
-
 }

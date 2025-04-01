@@ -5,17 +5,15 @@ import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
-/**
- * Simulates calls to an external Airport system
- * to retrieve or reserve parking slots, confirm arrivals, etc.
- */
 @Component
 public class MockAirportClient {
     private List<ParkingSlot> mockSlots = new ArrayList<>();
+    private Random random = new Random();
 
     public MockAirportClient() {
-        // Sample data: 3 gates each with 2 slots
+        // Sample data: 3 gates each with 2 slots (total 6 slots)
         mockSlots.add(new ParkingSlot("SLOT-A1", "GateA"));
         mockSlots.add(new ParkingSlot("SLOT-A2", "GateA"));
         mockSlots.add(new ParkingSlot("SLOT-B1", "GateB"));
@@ -25,7 +23,7 @@ public class MockAirportClient {
     }
 
     /**
-     * Return all available (unreserved) slots.
+     * Returns all available (non-reserved) parking slots.
      */
     public List<ParkingSlot> getAvailableSlots() {
         List<ParkingSlot> available = new ArrayList<>();
@@ -38,7 +36,7 @@ public class MockAirportClient {
     }
 
     /**
-     * Reserve a particular slot if available. Return the updated slot or null if fail.
+     * Reserves the slot with the given ID if it is available.
      */
     public ParkingSlot reserveSlot(String slotId) {
         for (ParkingSlot slot : mockSlots) {
@@ -51,9 +49,38 @@ public class MockAirportClient {
     }
 
     /**
-     * Simulate the airport acknowledging the truck arrival
+     * Verifies whether the current parking slot is still valid.
+     * Simulates an 80% chance that the slot remains reserved.
+     * If not, it releases the current slot and reserves a new available slot.
      */
+    public ParkingSlot verifyParkingSlot(String slotId) {
+        // 80% chance the slot remains valid.
+        if (random.nextInt(100) < 80) {
+            for (ParkingSlot slot : mockSlots) {
+                if (slot.getSlotId().equals(slotId)) {
+                    return slot;
+                }
+            }
+            return null;
+        } else {
+            // Simulate slot becoming unavailable.
+            for (ParkingSlot slot : mockSlots) {
+                if (slot.getSlotId().equals(slotId)) {
+                    slot.setReserved(false); // release the current slot.
+                    break;
+                }
+            }
+            List<ParkingSlot> available = getAvailableSlots();
+            if (!available.isEmpty()) {
+                ParkingSlot newSlot = available.get(0);
+                newSlot.setReserved(true);
+                return newSlot;
+            }
+            return null; // no available slot found.
+        }
+    }
+
     public void confirmArrival(String truckId) {
-        System.out.println("[AIRPORT] Received notice that truck " + truckId + " has arrived.");
+        System.out.println("[AIRPORT] Truck " + truckId + " has arrived at the airport.");
     }
 }
