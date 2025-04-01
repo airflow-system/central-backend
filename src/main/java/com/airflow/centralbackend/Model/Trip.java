@@ -49,6 +49,19 @@ public class Trip {
     @Transient
     private String errorMessage;
 
+    // In Trip.java
+    @Transient
+    private List<Intersection> upcomingIntersections;
+
+    public List<Intersection> getUpcomingIntersections() {
+        return upcomingIntersections;
+    }
+
+    public void setUpcomingIntersections(List<Intersection> upcomingIntersections) {
+        this.upcomingIntersections = upcomingIntersections;
+    }
+
+
     public Trip() {
         this.active = true;
     }

@@ -1,16 +1,14 @@
 package com.airflow.centralbackend.Services;
 
 import com.airflow.centralbackend.Model.*;
-import com.airflow.centralbackend.Repository.*;
+import com.airflow.centralbackend.Repository.DriverRepository;
+import com.airflow.centralbackend.Repository.TruckRepository;
+import com.airflow.centralbackend.Repository.TripRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -21,15 +19,6 @@ public class ScheduletoAirportServices {
     private static final double AIRPORT_LON = -97.0403;
 
     @Autowired
-    private MockDaliClient mockDaliClient;
-
-    @Autowired
-    private MockAirportClient mockAirportClient;
-
-    @Autowired
-    private MockOSMClient mockOSMClient;
-
-    @Autowired
     private DriverRepository driverRepository;
 
     @Autowired
@@ -38,18 +27,32 @@ public class ScheduletoAirportServices {
     @Autowired
     private TripRepository tripRepository;
 
+    // Use the in-memory cache for intersections instead of persisting to DB.
     @Autowired
-    private IntersectionRepository intersectionRepository;
+    private IntersectionCacheService intersectionCacheService;
+
+    // Use the provided mock clients.
+    @Autowired
+    private MockDaliClient mockDaliClient;
+
+    @Autowired
+    private MockAirportClient mockAirportClient;
+
+    @Autowired
+    private MockOSMClient mockOSMClient;
 
     @Value("${api.key}")
     private String googleMapsApiKey;
 
+    private RestTemplate restTemplate = new RestTemplate();
+
     /**
-     * 1) Schedules a truck for a route to the airport.
-     * Also fetches intersections from OSM and obtains initial DALI advices for the first 3 intersections.
+     * Schedules a truck for a route toward the airport.
+     * Generates a route, reserves parking, obtains initial DALI advice,
+     * fetches intersections via the mock OSM client, and caches them in memory.
      */
     public Trip scheduleTruck(String truckId, String driverId, Location currentLocation) {
-        // Validate driver & truck
+        // Validate driver and truck.
         Optional<Driver> driverOptional = driverRepository.findById(driverId);
         if (driverOptional.isEmpty()) {
             return createErrorTrip("Driver not found in DB: " + driverId, "DRIVER_NOT_FOUND");
@@ -62,10 +65,10 @@ public class ScheduletoAirportServices {
         }
         Truck truck = truckOptional.get();
 
-        // Get initial DALI advice for current location (can be overridden later by intersection advice)
-        DaliAdvice advice = mockDaliClient.getRealTimeTrafficData(currentLocation);
+        // Get initial DALI advice for current location.
+        DaliAdvice initialAdvice = mockDaliClient.getRealTimeTrafficData(currentLocation);
 
-        // Generate route using Google Directions API
+        // Generate route via Google Directions API.
         Route route;
         try {
             route = fetchRouteFromGoogle(
@@ -73,13 +76,12 @@ public class ScheduletoAirportServices {
                     currentLocation.getLongitude(),
                     AIRPORT_LAT,
                     AIRPORT_LON);
-            // Set the airport as the relevant destination
             route.setRelevantLocation(new Location(AIRPORT_LAT, AIRPORT_LON));
         } catch (Exception e) {
             return createErrorTrip("Failed to fetch route: " + e.getMessage(), "ROUTE_FETCH_FAILED");
         }
 
-        // Reserve parking slot at the airport
+        // Reserve a parking slot using the mock Airport client.
         List<ParkingSlot> availableSlots = mockAirportClient.getAvailableSlots();
         if (availableSlots.isEmpty()) {
             return createErrorTrip("No available parking slots at the airport!", "NO_PARKING_SLOTS");
@@ -87,57 +89,57 @@ public class ScheduletoAirportServices {
         ParkingSlot chosenSlot = availableSlots.get(0);
         ParkingSlot reservedSlot = mockAirportClient.reserveSlot(chosenSlot.getSlotId());
         if (reservedSlot == null) {
-            return createErrorTrip("Failed to reserve the parking slot!", "SLOT_RESERVATION_FAILED");
+            return createErrorTrip("Failed to reserve parking slot!", "SLOT_RESERVATION_FAILED");
         }
 
-        // Build the Trip entity
+        // Build and save the Trip.
         Trip trip = new Trip();
         trip.setDriver(driver);
         trip.setTruck(truck);
-        trip.setReservedParkingSlot(chosenSlot);
+        trip.setReservedParkingSlot(reservedSlot);
         trip.setCurrentLocation(currentLocation);
         trip.setCurrentRoute(route);
-        trip.setLatestDaliAdvice(advice);
+        trip.setLatestDaliAdvice(initialAdvice);
         trip.setActive(true);
         trip.setTransientErrorFlag(false);
         LocalDateTime now = LocalDateTime.now();
         trip.setStartTime(now);
         trip.setEstimatedArrivalTime(now.plusMinutes((long) route.getEstimatedTimeMinutes()));
 
-        // Save the Trip first so we can link intersections to it
         Trip savedTrip;
         try {
             savedTrip = tripRepository.save(trip);
-            savedTrip.setTransientErrorFlag(false);
         } catch (Exception e) {
             return createErrorTrip("Failed to save trip: " + e.getMessage(), "DB_SAVE_FAILED");
         }
 
-        // --------------- New: Fetch and store intersections from OSM ----------------
-        // For simulation, we fetch (say) 10 intersections along the route.
-        List<Intersection> intersections = mockOSMClient.getIntersections(savedTrip, currentLocation, new Location(AIRPORT_LAT, AIRPORT_LON), 10);
+        // Fetch intersections using the mock OSM client.
         try {
-            intersectionRepository.saveAll(intersections);
+            List<Intersection> intersections = mockOSMClient.getIntersections(savedTrip, currentLocation, new Location(AIRPORT_LAT, AIRPORT_LON), 10);
+            // Store intersections in the in-memory cache.
+            intersectionCacheService.putIntersections(savedTrip.getId(), intersections);
+            // Retrieve the first 3 intersections.
+            List<Intersection> firstThree = intersectionCacheService.getNextIntersections(savedTrip.getId(), 3);
+            // For each intersection, get DALI advice and attach it.
+            for (Intersection inter : firstThree) {
+                DaliAdvice adviceForIntersection = mockDaliClient.getRealTimeTrafficData(inter.getLocation());
+                inter.setDaliAdvice(adviceForIntersection);
+            }
+            // Set these intersections in the transient field so they are sent in the response.
+            savedTrip.setUpcomingIntersections(firstThree);
         } catch (Exception e) {
-            return createErrorTrip("Failed to store intersections: " + e.getMessage(), "OSM_SAVE_FAILED");
+            return createErrorTrip("Failed to fetch intersections: " + e.getMessage(), "OSM_FETCH_FAILED");
         }
-
-        // Get the first 3 intersections (if available) and call DALI for each
-        List<DaliAdvice> initialAdviceList = new ArrayList<>();
-        intersections.stream()
-                .filter(intersection -> intersection.getSequenceNumber() <= 3)
-                .forEach(intersection -> {
-                    DaliAdvice interAdvice = mockDaliClient.getRealTimeTrafficData(intersection.getLocation());
-                    initialAdviceList.add(interAdvice);
-                });
-        savedTrip.setDalAdviceList(initialAdviceList);
-        // ---------------------------------------------------------------------------
 
         return savedTrip;
     }
 
     /**
-     * 2) Updates the trip location and recalculates route if needed.
+     * Updates the trip location.
+     * - Gets updated DALI advice.
+     * - If advice indicates a route change, re-fetches the route and refreshes intersections.
+     * - Otherwise, retrieves the next 3 intersections from the cache and includes them in the response.
+     * - Verifies parking slot availability and reassigns if necessary.
      */
     public Trip updateTripLocation(String tripId, Location newLocation) {
         Optional<Trip> tripOptional = tripRepository.findById(tripId);
@@ -148,24 +150,19 @@ public class ScheduletoAirportServices {
         if (!trip.isActive()) {
             return createErrorTrip("Trip is already completed!", "TRIP_COMPLETED");
         }
-
         trip.setCurrentLocation(newLocation);
-        try {
-            mockDaliClient.sendLocationUpdateToDali(newLocation, trip.getDriver().getDriverId());
-        } catch (Exception e) {
-            return createErrorTrip("Failed to send location to DALI: " + e.getMessage(), "DALI_UPDATE_FAILED");
-        }
 
-        DaliAdvice advice;
-        try {
-            advice = mockDaliClient.getRealTimeTrafficData(newLocation);
-            trip.setLatestDaliAdvice(advice);
-        } catch (Exception e) {
-            return createErrorTrip("Failed to get traffic data from DALI: " + e.getMessage(), "DALI_DATA_FAILED");
-        }
+        // Log the location update (simulate sending update to DALI)
+        System.out.println("[DALI] Received location update from driver " + trip.getDriver().getDriverId() +
+                ": lat=" + newLocation.getLatitude() + ", lon=" + newLocation.getLongitude());
+
+        // Get updated DALI advice for the current location
+        DaliAdvice advice = mockDaliClient.getRealTimeTrafficData(newLocation);
+        trip.setLatestDaliAdvice(advice);
 
         if (advice.isRouteChanged()) {
             try {
+                // Re-fetch the route if a change is needed
                 Route updatedRoute = fetchRouteFromGoogle(
                         newLocation.getLatitude(),
                         newLocation.getLongitude(),
@@ -174,35 +171,58 @@ public class ScheduletoAirportServices {
                 trip.setCurrentRoute(updatedRoute);
                 LocalDateTime now = LocalDateTime.now();
                 trip.setEstimatedArrivalTime(now.plusMinutes((long) updatedRoute.getEstimatedTimeMinutes()));
+                // Refresh intersections: clear cache and load new intersections
+                intersectionCacheService.removeIntersections(trip.getId());
+                List<Intersection> newIntersections = mockOSMClient.getIntersections(trip, newLocation, trip.getCurrentRoute().getRelevantLocation(), 10);
+                intersectionCacheService.putIntersections(trip.getId(), newIntersections);
             } catch (Exception e) {
-                return createErrorTrip("Failed to update route: " + e.getMessage(), "ROUTE_UPDATE_FAILED");
+                return createErrorTrip("Failed to update route and refresh intersections: " + e.getMessage(), "ROUTE_UPDATE_FAILED");
             }
-        } else if (advice.getMessage().toLowerCase().contains("delay")) {
+        } else {
+            // Retrieve next three intersections from the cache
+            List<Intersection> nextThree = intersectionCacheService.getNextIntersections(trip.getId(), 3);
+            // For each intersection, get DALI advice and attach it
+            for (Intersection inter : nextThree) {
+                DaliAdvice interAdvice = mockDaliClient.getRealTimeTrafficData(inter.getLocation());
+                inter.setDaliAdvice(interAdvice);
+            }
+            trip.setUpcomingIntersections(nextThree);
+        }
+
+        // Adjust ETA if the advice mentions a delay.
+        if (advice.getMessage().toLowerCase().contains("delay")) {
             trip.setEstimatedArrivalTime(trip.getEstimatedArrivalTime().plusMinutes(5));
         }
 
-        // Verify parking slot availability if a route change or delay is indicated.
-        if (advice.isRouteChanged() || advice.getMessage().toLowerCase().contains("delay")) {
+        // Verify parking slot using the mock Airport client.
+        try {
             ParkingSlot verifiedSlot = mockAirportClient.verifyParkingSlot(trip.getReservedParkingSlot().getSlotId());
             if (verifiedSlot == null) {
-                return createErrorTrip("Parking slot is no longer available!", "PARKING_SLOT_UNAVAILABLE");
-            }
-            if (!verifiedSlot.getSlotId().equals(trip.getReservedParkingSlot().getSlotId())) {
+                List<ParkingSlot> availableSlots = mockAirportClient.getAvailableSlots();
+                if (availableSlots.isEmpty()) {
+                    return createErrorTrip("Parking slot is no longer available!", "PARKING_SLOT_UNAVAILABLE");
+                }
+                trip.setReservedParkingSlot(availableSlots.get(0));
+            } else {
                 trip.setReservedParkingSlot(verifiedSlot);
             }
+        } catch (Exception e) {
+            return createErrorTrip("Failed to verify parking slot: " + e.getMessage(), "PARKING_VERIFY_FAILED");
         }
 
         try {
             Trip updatedTrip = tripRepository.save(trip);
-            updatedTrip.setTransientErrorFlag(false);
             return updatedTrip;
         } catch (Exception e) {
             return createErrorTrip("Failed to save updated trip: " + e.getMessage(), "DB_SAVE_FAILED");
         }
     }
 
+
     /**
-     * 3) Completes a trip (e.g., once the truck arrives).
+     * Completes the trip.
+     * Confirms arrival via the mock Airport client, clears the intersection cache,
+     * and deletes the trip from the database.
      */
     public Trip completeTrip(String tripId) {
         Optional<Trip> tripOptional = tripRepository.findById(tripId);
@@ -214,79 +234,59 @@ public class ScheduletoAirportServices {
             return createErrorTrip("Trip is already completed!", "TRIP_ALREADY_COMPLETED");
         }
         trip.setActive(false);
+        LocalDateTime now = LocalDateTime.now();
+        // Confirm arrival using the mock Airport client.
         try {
             mockAirportClient.confirmArrival(trip.getTruck().getTruckId());
         } catch (Exception e) {
             return createErrorTrip("Failed to confirm arrival with airport: " + e.getMessage(), "AIRPORT_CONFIRM_FAILED");
         }
+        // Clear intersections from the in-memory cache.
+        intersectionCacheService.removeIntersections(trip.getId());
         try {
-            Trip updatedTrip = tripRepository.save(trip);
-            updatedTrip.setTransientErrorFlag(false);
-            return updatedTrip;
+            tripRepository.delete(trip);
         } catch (Exception e) {
-            return createErrorTrip("Failed to save completed trip: " + e.getMessage(), "DB_SAVE_FAILED");
+            return createErrorTrip("Failed to delete trip after completion: " + e.getMessage(), "DB_DELETE_FAILED");
         }
+        Trip responseTrip = new Trip();
+        responseTrip.setErrorMessage("Trip completed and cleaned up.");
+        responseTrip.setActive(false);
+        return responseTrip;
     }
 
     /**
-     * 4) Retrieves details of a trip.
+     * Retrieves trip details.
      */
     public Trip getTrip(String tripId) {
         Optional<Trip> tripOptional = tripRepository.findById(tripId);
         if (tripOptional.isEmpty()) {
             return createErrorTrip("Trip not found: " + tripId, "TRIP_NOT_FOUND");
         }
-        Trip trip = tripOptional.get();
-        trip.setTransientErrorFlag(false);
-        return trip;
+        return tripOptional.get();
     }
 
-    /**
-     * Helper to create a Trip representing an error state.
-     */
-    private Trip createErrorTrip(String errorMessage, String errorCode) {
-        Trip errorTrip = new Trip();
-        errorTrip.setActive(false);
-        errorTrip.setErrorMessage(errorMessage);
-        errorTrip.setTransientErrorFlag(true);
-        errorTrip.setTransientErrorCode(errorCode);
-        return errorTrip;
-    }
+    // -------------------- Google Directions API Methods --------------------
+    // These methods remain unchanged.
 
-    /**
-     * Calls Google Directions API to fetch an optimized route.
-     */
     private Route fetchRouteFromGoogle(double startLat, double startLng, double endLat, double endLng)
             throws Exception {
         String url = "https://routes.googleapis.com/directions/v2:computeRoutes";
         Map<String, Object> requestBody = buildRoutesRequestBody(startLat, startLng, endLat, endLng);
-
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("x-goog-api-key", googleMapsApiKey);
         headers.set("x-goog-fieldmask", "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline");
-
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
-        RestTemplate restTemplate = new RestTemplate();
-
-        try {
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, entity, Map.class);
-            if (response.getStatusCode() != HttpStatus.OK) {
-                throw new Exception("Failed to call Google Routes API: " + response.getStatusCode());
-            }
-            return parseGoogleRoutesResponse(response.getBody());
-        } catch (Exception e) {
-            throw new Exception("Google API request failed: " + e.getMessage());
+        RestTemplate rt = new RestTemplate();
+        ResponseEntity<Map> response = rt.postForEntity(url, entity, Map.class);
+        if (response.getStatusCode() != HttpStatus.OK) {
+            throw new Exception("Failed to call Google Routes API: " + response.getStatusCode());
         }
+        return parseGoogleRoutesResponse(response.getBody());
     }
 
-    /**
-     * Builds the request body for the Google Routes API.
-     */
     private Map<String, Object> buildRoutesRequestBody(double startLat, double startLng, double endLat, double endLng) {
         Map<String, Object> requestBody = new HashMap<>();
-
-        // Origin
         Map<String, Object> origin = new HashMap<>();
         Map<String, Object> originLocation = new HashMap<>();
         Map<String, Object> originLatLng = new HashMap<>();
@@ -295,8 +295,6 @@ public class ScheduletoAirportServices {
         originLocation.put("latLng", originLatLng);
         origin.put("location", originLocation);
         requestBody.put("origin", origin);
-
-        // Destination
         Map<String, Object> destination = new HashMap<>();
         Map<String, Object> destinationLocation = new HashMap<>();
         Map<String, Object> destinationLatLng = new HashMap<>();
@@ -305,20 +303,13 @@ public class ScheduletoAirportServices {
         destinationLocation.put("latLng", destinationLatLng);
         destination.put("location", destinationLocation);
         requestBody.put("destination", destination);
-
-        // Additional parameters
         requestBody.put("travelMode", "DRIVE");
         requestBody.put("routingPreference", "TRAFFIC_AWARE");
         requestBody.put("computeAlternativeRoutes", true);
-
         return requestBody;
     }
 
-    /**
-     * Parses the response from the Google Routes API.
-     */
     private Route parseGoogleRoutesResponse(Map<String, Object> body) throws Exception {
-        @SuppressWarnings("unchecked")
         List<Map<String, Object>> routes = (List<Map<String, Object>>) body.get("routes");
         if (routes == null || routes.isEmpty()) {
             throw new Exception("No routes found in the Google response");
@@ -344,9 +335,6 @@ public class ScheduletoAirportServices {
         return route;
     }
 
-    /**
-     * Parses the duration field (in seconds) and converts it to minutes.
-     */
     private double parseDurationField(Object durationField) throws Exception {
         double durationSeconds = 0.0;
         if (durationField instanceof Number) {
@@ -367,9 +355,6 @@ public class ScheduletoAirportServices {
         return durationSeconds / 60.0;
     }
 
-    /**
-     * Parses the distance field (in meters) and converts it to kilometers.
-     */
     private double parseDistanceField(Object distanceField) throws Exception {
         double distanceMeters = 0.0;
         if (distanceField instanceof Number) {
@@ -385,5 +370,14 @@ public class ScheduletoAirportServices {
             throw new Exception("Unexpected distance field type: " + distanceField.getClass().getName());
         }
         return distanceMeters / 1000.0;
+    }
+
+    private Trip createErrorTrip(String errorMessage, String errorCode) {
+        Trip errorTrip = new Trip();
+        errorTrip.setActive(false);
+        errorTrip.setErrorMessage(errorMessage);
+        errorTrip.setTransientErrorFlag(true);
+        errorTrip.setTransientErrorCode(errorCode);
+        return errorTrip;
     }
 }
