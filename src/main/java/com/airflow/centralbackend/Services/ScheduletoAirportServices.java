@@ -53,10 +53,13 @@ public class ScheduletoAirportServices {
      */
     public Trip scheduleTruck(String truckId, String driverId, Location currentLocation) {
         // Validate driver and truck.
+        System.out.println(truckId);
+        System.out.println(driverId);
         Optional<Driver> driverOptional = driverRepository.findById(driverId);
         if (driverOptional.isEmpty()) {
             return createErrorTrip("Driver not found in DB: " + driverId, "DRIVER_NOT_FOUND");
         }
+
         Driver driver = driverOptional.get();
 
         Optional<Truck> truckOptional = truckRepository.findById(truckId);
