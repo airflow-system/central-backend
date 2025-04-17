@@ -15,8 +15,8 @@ import java.util.*;
 
 @Service
 public class ScheduletoAirportServices {
-    private static final double AIRPORT_LAT = 32.8998;
-    private static final double AIRPORT_LON = -97.0403;
+    private static final double AIRPORT_LAT = 32.988052;
+    private static final double AIRPORT_LON = -96.750896;
 
     @Autowired
     private DriverRepository driverRepository;
