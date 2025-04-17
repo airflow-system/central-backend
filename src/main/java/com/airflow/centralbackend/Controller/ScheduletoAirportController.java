@@ -110,11 +110,19 @@ public class ScheduletoAirportController {
      * POST /api/airFlow/scheduletowards?truckId=TRUCK001&driverId=DRIVER001
      * BODY: { "latitude":12.34, "longitude":56.78 }
      */
-    @PostMapping("/scheduletowards")
-    public Trip scheduleTruck(@RequestParam String truckId,
-                              @RequestParam String driverId,
-                              @RequestBody Location currentLocation) {
-        return scheduletoAirportServices.scheduleTruck(truckId, driverId, currentLocation);
+    @GetMapping("/scheduletowards")
+    public Route scheduleTruck(@RequestParam String assignmentID,
+                              @RequestParam String where,
+                              @RequestBody Coordinate currentLocation) {
+        return scheduletoAirportServices.scheduleTruck(assignmentID, where, currentLocation);
+    }
+
+    @PutMapping("/updateDali")
+    public IntersectionResponse updatesFromDali(@RequestParam String assignmentId,
+                                   @RequestParam String priority,
+                                   @RequestBody Coordinate coordinate) {
+
+        return mockTransportationController.getDaliIntersection("token", schedulerService.getCachedAssignmentsMap().get(assignmentId).getTruck_id(), coordinate.getLatitude(), coordinate.getLongitude(), priority);
     }
 
     /**
@@ -124,11 +132,11 @@ public class ScheduletoAirportController {
      * PUT /api/airFlow/updateLocation/{tripId}
      * BODY: { "latitude":12.90, "longitude":56.20 }
      */
-    @PutMapping("/updateLocation/{tripId}")
-    public Trip updateTripLocation(@PathVariable String tripId,
-                                   @RequestBody Location newLocation) {
-        return scheduletoAirportServices.updateTripLocation(tripId, newLocation);
-    }
+//    @PutMapping("/updateLocation/{tripId}")
+//    public Trip updateTripLocation(@PathVariable String tripId,
+//                                   @RequestBody Location newLocation) {
+//        return scheduletoAirportServices.updateTripLocation(tripId, newLocation);
+//    }
 
     /**
      * Completes an ongoing trip. This endpoint marks the trip as inactive,

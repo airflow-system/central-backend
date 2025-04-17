@@ -1,5 +1,6 @@
 package com.airflow.centralbackend.Model;
 
+import com.airflow.centralbackend.dto.Route;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.List;

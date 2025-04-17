@@ -164,10 +164,46 @@ public class MockTransportationController {
         );
         return resp.getBody();
     }
+    @GetMapping("/route_polyline")
+    public String getRoutePolyline(
+            @RequestHeader("x-token") String xToken,                 // your incoming header
+            @RequestParam("start_lat") double startLat,
+            @RequestParam("start_lon") double startLon,
+            @RequestParam("end_lat")   double endLat,
+            @RequestParam("end_lon")   double endLon,
+            @RequestParam(value = "filter_traffic_lights", defaultValue = "true")
+            boolean filterTrafficLights,
+            @RequestParam(value = "avoid_tolls", defaultValue = "false")
+            boolean avoidTolls
+    ) {
+        // Build headers for the downstream call
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("token", xToken);   // OpenAPI says the header name is "token"
+
+        // Build the URI with all required & optional params
+        URI uri = UriComponentsBuilder
+                .fromHttpUrl("https://routes-api-bqt1.onrender.com/route_polyline")
+                .queryParam("start_lat",             startLat)
+                .queryParam("start_lon",             startLon)
+                .queryParam("end_lat",               endLat)
+                .queryParam("end_lon",               endLon)
+                .queryParam("filter_traffic_lights", filterTrafficLights)
+                .queryParam("avoid_tolls",           avoidTolls)
+                .build()   // values get encoded automatically
+                .toUri();
+
+        // Fire the GET
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+        ResponseEntity<String> resp = restTemplate.exchange(
+                uri, HttpMethod.GET, entity, String.class
+        );
+        System.out.println(resp.getBody());
+        return resp.getBody();
+    }
 
     private HttpHeaders createHeaders(String token) {
         HttpHeaders headers = new HttpHeaders();
-        headers.set("x-token", token);
+        headers.set("x-token", "token");
         return headers;
     }
 }

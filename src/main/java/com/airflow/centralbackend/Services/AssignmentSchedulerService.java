@@ -47,7 +47,7 @@ public class AssignmentSchedulerService {
      * At midnight every day, fetch today's manifests then dispatch assign_tasks,
      * caching the result until 23:59:00.
      */
-    @Scheduled(cron = "0 22 0 * * *")
+    @Scheduled(cron = "0 5 4 * * *")
     public void fetchAndCacheAssignments() throws JsonProcessingException {
         // 1) get all manifests
         ManifestsResponse manifestsResp = mockController.getManifests(apiToken);
